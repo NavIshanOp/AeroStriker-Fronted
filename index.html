@@ -1,53 +1,226 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Bluetooth Serial Connection</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AeroStriker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f2f2f2;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+    h1 { color: #333; }
+    
+    /* Joystick containers for landscape mode */
+    .joystick-wrapper {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      width: 100%;
+      height: 50%;
+    }
+    .joystick-container {
+      margin: 20px;
+      width: 150px;
+      height: 150px;
+      position: relative;
+      background-color: #ddd;
+      border-radius: 50%;
+      overflow: hidden;
+    }
+    .joystick {
+      width: 40px;
+      height: 40px;
+      background-color: #4CAF50;
+      border-radius: 50%;
+      position: absolute;
+      top: 55px;
+      left: 55px;
+    }
+    
+    /* Speed control and buttons */
+    #speed-control {
+      margin-top: 20px;
+    }
+    input[type="range"] {
+      width: 300px;
+      margin: 20px;
+    }
+    .btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+      margin: 5px;
+    }
+    .btn:active {
+      background-color: #388E3C;
+    }
+  </style>
 </head>
 <body>
-    <h1>ESP32 Bluetooth Serial Connection</h1>
-    <button onclick="connectSerial()">Connect to Bluetooth</button>
-    <p>Status: <span id="status">Disconnected</span></p>
+  <h1>AeroStriker 360° Control</h1>
 
-    <script>
-        let port;
-        let writer;
+  <div class="joystick-wrapper">
+    <div id="leftContainer" class="joystick-container">
+      <div id="leftJoystick" class="joystick"></div>
+    </div>
+    <div id="rightContainer" class="joystick-container">
+      <div id="rightJoystick" class="joystick"></div>
+    </div>
+  </div>
 
-        async function connectSerial() {
-            try {
-                // Request a serial port from the user
-                port = await navigator.serial.requestPort();
-                console.log('Port selected:', port);
+  <div id="speed-control">
+    <label for="speed">Speed:</label>
+    <input type="range" min="0" max="255" value="255" id="speed" onchange="updateSpeed(this.value)">
+    <span id="speedValue">255</span>
+  </div>
 
-                // Open the port (baud rate may not be needed for Bluetooth Serial)
-                await port.open({ baudRate: 115200 }); // Try without baudRate if this fails
-                console.log('Port opened successfully');
+  <button class="btn" onclick="toggleFullScreen()">Toggle Fullscreen</button>
+  <button class="btn" onclick="connectBluetooth()">Connect to Bluetooth</button>
+  <p>Status: <span id="status">Disconnected</span></p>
 
-                // Get a writer for sending data
-                writer = port.writable.getWriter();
-                document.getElementById('status').innerText = 'Connected';
-                console.log('Serial Port Connected');
-            } catch (e) {
-                console.error('Serial Connection Failed:', e);
-                document.getElementById('status').innerText = 'Connection Failed';
+  <script>
+    // BLE characteristic to write data to
+    let bleCharacteristic;
+    let speed = 255; // Default speed
 
-                // Provide specific error details
-                if (e.name === 'NotFoundError') {
-                    console.error('No port selected by the user.');
-                    alert('Please select the ESP32 serial port when prompted.');
-                } else if (e.name === 'SecurityError') {
-                    console.error('Permission denied or security issue.');
-                    alert('Check browser permissions for serial access.');
-                } else if (e.name === 'InvalidStateError') {
-                    console.error('Port is already open or in an invalid state.');
-                    alert('Close other applications using the port (e.g., Serial Monitor).');
-                } else {
-                    console.error('Unknown error:', e);
-                    alert('An unexpected error occurred. Check the console for details.');
-                }
-            }
+    // Joystick variables
+    let leftJoystick, rightJoystick, leftContainer, rightContainer;
+    let containerSize, joystickSize;
+
+    // Connect to BLE device using Web Bluetooth API
+    async function connectBluetooth() {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: ['0000abcd-0000-1000-8000-00805f9b34fb'] }]
+        });
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('0000abcd-0000-1000-8000-00805f9b34fb');
+        bleCharacteristic = await service.getCharacteristic('00001234-0000-1000-8000-00805f9b34fb');
+        document.getElementById('status').innerText = 'Connected';
+        console.log('Bluetooth device connected');
+      } catch (e) {
+        console.error('Bluetooth Connection Failed:', e);
+        document.getElementById('status').innerText = 'Connection Failed';
+      }
+    }
+
+    // Send command over Bluetooth as JSON
+    async function sendCommand(command) {
+      if (bleCharacteristic) {
+        try {
+          const data = new TextEncoder().encode(JSON.stringify(command) + '\n');
+          await bleCharacteristic.writeValue(data);
+          console.log('Command sent:', command);
+        } catch (e) {
+          console.error('Error sending command:', e);
         }
-    </script>
+      } else {
+        console.warn('BLE device not connected.');
+      }
+    }
+
+    // Set up joystick controls
+    function setupJoysticks() {
+      leftJoystick = document.getElementById('leftJoystick');
+      rightJoystick = document.getElementById('rightJoystick');
+      leftContainer = document.getElementById('leftContainer');
+      rightContainer = document.getElementById('rightContainer');
+      containerSize = leftContainer.offsetWidth;
+      joystickSize = leftJoystick.offsetWidth;
+
+      // Attach touch events for both containers
+      leftContainer.addEventListener('touchmove', function(event) {
+        handleMove(event, leftJoystick, leftContainer, 'move');
+      }, false);
+
+      rightContainer.addEventListener('touchmove', function(event) {
+        handleMove(event, rightJoystick, rightContainer, 'rotate');
+      }, false);
+
+      // Reset joystick position on touch end
+      leftContainer.addEventListener('touchend', function() {
+        resetJoystick(leftJoystick);
+      }, false);
+      rightContainer.addEventListener('touchend', function() {
+        resetJoystick(rightJoystick);
+      }, false);
+    }
+
+    // Handle joystick movement
+    function handleMove(event, joystick, container, controlType) {
+      event.preventDefault();
+      var touch = event.touches[0];
+      var rect = container.getBoundingClientRect();
+      var x = touch.clientX - rect.left - joystickSize / 2;
+      var y = touch.clientY - rect.top - joystickSize / 2;
+
+      // Constrain movement within container
+      if (x > containerSize - joystickSize) x = containerSize - joystickSize;
+      if (y > containerSize - joystickSize) y = containerSize - joystickSize;
+      if (x < 0) x = 0;
+      if (y < 0) y = 0;
+
+      joystick.style.left = x + 'px';
+      joystick.style.top = y + 'px';
+
+      // Calculate angle relative to container center
+      var centerX = containerSize / 2;
+      var centerY = containerSize / 2;
+      var angle = Math.atan2(y - centerY, x - centerX) * (180 / Math.PI);
+
+      // Send movement data over BLE
+      sendCommand({ control: controlType, angle: angle, speed: speed });
+    }
+
+    // Reset joystick to center position and send stop command
+    function resetJoystick(joystick) {
+      joystick.style.left = (containerSize / 2 - joystickSize / 2) + 'px';
+      joystick.style.top = (containerSize / 2 - joystickSize / 2) + 'px';
+
+      // Determine control type based on joystick ID
+      var control = joystick.id === 'leftJoystick' ? 'move' : 'rotate';
+      sendCommand({ control: control, angle: 0, speed: 0 });
+    }
+
+    // Update speed value when range input changes
+    function updateSpeed(newSpeed) {
+      speed = newSpeed;
+      document.getElementById("speedValue").innerText = newSpeed;
+      sendCommand({ control: "speed", speed: speed });
+    }
+
+    // Toggle full-screen mode
+    function toggleFullScreen() {
+      var elem = document.documentElement;
+      if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Initialize joystick setup on page load
+    window.onload = function() {
+      setupJoysticks();
+    };
+  </script>
 </body>
 </html>
