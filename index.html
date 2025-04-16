@@ -19,7 +19,7 @@
       overflow: hidden;
     }
     h1 { color: #333; }
-    
+
     /* Joystick containers for landscape mode */
     .joystick-wrapper {
       display: flex;
@@ -46,8 +46,8 @@
       top: 55px;
       left: 55px;
     }
-    
-    /* Speed control and full-screen button */
+
+    /* Speed control and buttons */
     #speed-control {
       margin-top: 20px;
     }
@@ -55,7 +55,7 @@
       width: 300px;
       margin: 20px;
     }
-    .fullscreen-btn, .connect-btn {
+    .btn {
       background-color: #4CAF50;
       color: white;
       border: none;
@@ -65,7 +65,7 @@
       border-radius: 5px;
       margin: 5px;
     }
-    .fullscreen-btn:active, .connect-btn:active {
+    .btn:active {
       background-color: #388E3C;
     }
   </style>
@@ -88,20 +88,20 @@
     <span id="speedValue">255</span>
   </div>
 
-  <button class="fullscreen-btn" onclick="toggleFullScreen()">Toggle Fullscreen</button>
-  <button class="connect-btn" onclick="connectBluetooth()">Connect to Bluetooth</button>
+  <button class="btn" onclick="toggleFullScreen()">Toggle Fullscreen</button>
+  <button class="btn" onclick="connectBluetooth()">Connect to Bluetooth</button>
   <p>Status: <span id="status">Disconnected</span></p>
 
   <script>
-    // BLE characteristic used for writing commands
+    // Global variables for BLE characteristic and control
     let bleCharacteristic;
     let speed = 255; // Default speed
 
-    // Joystick variables
+    // Variables for joystick handling
     let leftJoystick, rightJoystick, leftContainer, rightContainer;
     let containerSize, joystickSize;
 
-    // Connect to the BLE device using Web Bluetooth
+    // Connect to the BLE device using the Web Bluetooth API
     async function connectBluetooth() {
       try {
         const device = await navigator.bluetooth.requestDevice({
@@ -118,7 +118,7 @@
       }
     }
 
-    // Send commands over BLE as JSON
+    // Send commands via BLE as JSON
     async function sendCommand(command) {
       if (bleCharacteristic) {
         try {
@@ -139,19 +139,18 @@
       rightJoystick = document.getElementById('rightJoystick');
       leftContainer = document.getElementById('leftContainer');
       rightContainer = document.getElementById('rightContainer');
-      containerSize = leftContainer.offsetWidth;
+      containerSize = leftContainer.offsetWidth; // Assuming both are the same size
       joystickSize = leftJoystick.offsetWidth;
 
-      // Attach touch events for both containers
+      // Attach touch events for both joystick containers
       leftContainer.addEventListener('touchmove', function(event) {
         handleMove(event, leftJoystick, leftContainer, 'move');
       }, false);
-
       rightContainer.addEventListener('touchmove', function(event) {
         handleMove(event, rightJoystick, rightContainer, 'rotate');
       }, false);
 
-      // Reset joystick position on touch end
+      // Reset joystick position on touchend
       leftContainer.addEventListener('touchend', function() {
         resetJoystick(leftJoystick);
       }, false);
@@ -160,15 +159,15 @@
       }, false);
     }
 
-    // Handle joystick movement
+    // Process joystick movement
     function handleMove(event, joystick, container, controlType) {
       event.preventDefault();
-      var touch = event.touches[0];
-      var rect = container.getBoundingClientRect();
-      var x = touch.clientX - rect.left - joystickSize / 2;
-      var y = touch.clientY - rect.top - joystickSize / 2;
+      let touch = event.touches[0];
+      let rect = container.getBoundingClientRect();
+      let x = touch.clientX - rect.left - joystickSize / 2;
+      let y = touch.clientY - rect.top - joystickSize / 2;
 
-      // Constrain movement within container
+      // Constrain joystick movement within the container
       if (x > containerSize - joystickSize) x = containerSize - joystickSize;
       if (y > containerSize - joystickSize) y = containerSize - joystickSize;
       if (x < 0) x = 0;
@@ -177,46 +176,42 @@
       joystick.style.left = x + 'px';
       joystick.style.top = y + 'px';
 
-      // Calculate the angle relative to the center
-      var centerX = containerSize / 2;
-      var centerY = containerSize / 2;
-      var angle = Math.atan2(y - centerY, x - centerX) * (180 / Math.PI);
+      // Calculate angle relative to container center
+      let centerX = containerSize / 2;
+      let centerY = containerSize / 2;
+      let angle = Math.atan2(y - centerY, x - centerX) * (180 / Math.PI);
 
-      // Send movement data over BLE
+      // Send command with control type, angle, and speed
       sendCommand({ control: controlType, angle: angle, speed: speed });
     }
 
-    // Reset joystick and send a stop command
+    // Reset joystick to center position
     function resetJoystick(joystick) {
       joystick.style.left = (containerSize / 2 - joystickSize / 2) + 'px';
       joystick.style.top = (containerSize / 2 - joystickSize / 2) + 'px';
 
-      var control = joystick.id === 'leftJoystick' ? 'move' : 'rotate';
+      let control = (joystick.id === 'leftJoystick') ? 'move' : 'rotate';
       sendCommand({ control: control, angle: 0, speed: 0 });
     }
 
-    // Update speed value when range input changes
+    // Update speed based on range input and send updated command
     function updateSpeed(newSpeed) {
       speed = newSpeed;
       document.getElementById("speedValue").innerText = newSpeed;
       sendCommand({ control: "speed", speed: speed });
     }
 
-    // Toggle full-screen mode
+    // Toggle full screen mode
     function toggleFullScreen() {
-      var elem = document.documentElement;
+      let elem = document.documentElement;
       if (!document.fullscreenElement) {
-        if (elem.requestFullscreen) {
-          elem.requestFullscreen();
-        }
+        elem.requestFullscreen();
       } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        }
+        document.exitFullscreen();
       }
     }
 
-    // Initialize joysticks when page loads
+    // Initialize joystick controls when page loads
     window.onload = function() {
       setupJoysticks();
     };
