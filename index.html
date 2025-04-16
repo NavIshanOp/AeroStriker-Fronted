@@ -47,7 +47,7 @@
       left: 55px;
     }
     
-    /* Speed control and buttons */
+    /* Speed control and full-screen button */
     #speed-control {
       margin-top: 20px;
     }
@@ -55,7 +55,7 @@
       width: 300px;
       margin: 20px;
     }
-    .btn {
+    .fullscreen-btn, .connect-btn {
       background-color: #4CAF50;
       color: white;
       border: none;
@@ -65,7 +65,7 @@
       border-radius: 5px;
       margin: 5px;
     }
-    .btn:active {
+    .fullscreen-btn:active, .connect-btn:active {
       background-color: #388E3C;
     }
   </style>
@@ -88,12 +88,12 @@
     <span id="speedValue">255</span>
   </div>
 
-  <button class="btn" onclick="toggleFullScreen()">Toggle Fullscreen</button>
-  <button class="btn" onclick="connectBluetooth()">Connect to Bluetooth</button>
+  <button class="fullscreen-btn" onclick="toggleFullScreen()">Toggle Fullscreen</button>
+  <button class="connect-btn" onclick="connectBluetooth()">Connect to Bluetooth</button>
   <p>Status: <span id="status">Disconnected</span></p>
 
   <script>
-    // BLE characteristic to write data to
+    // BLE characteristic used for writing commands
     let bleCharacteristic;
     let speed = 255; // Default speed
 
@@ -101,7 +101,7 @@
     let leftJoystick, rightJoystick, leftContainer, rightContainer;
     let containerSize, joystickSize;
 
-    // Connect to BLE device using Web Bluetooth API
+    // Connect to the BLE device using Web Bluetooth
     async function connectBluetooth() {
       try {
         const device = await navigator.bluetooth.requestDevice({
@@ -118,7 +118,7 @@
       }
     }
 
-    // Send command over Bluetooth as JSON
+    // Send commands over BLE as JSON
     async function sendCommand(command) {
       if (bleCharacteristic) {
         try {
@@ -129,7 +129,7 @@
           console.error('Error sending command:', e);
         }
       } else {
-        console.warn('BLE device not connected.');
+        console.warn('Bluetooth device not connected.');
       }
     }
 
@@ -177,7 +177,7 @@
       joystick.style.left = x + 'px';
       joystick.style.top = y + 'px';
 
-      // Calculate angle relative to container center
+      // Calculate the angle relative to the center
       var centerX = containerSize / 2;
       var centerY = containerSize / 2;
       var angle = Math.atan2(y - centerY, x - centerX) * (180 / Math.PI);
@@ -186,12 +186,11 @@
       sendCommand({ control: controlType, angle: angle, speed: speed });
     }
 
-    // Reset joystick to center position and send stop command
+    // Reset joystick and send a stop command
     function resetJoystick(joystick) {
       joystick.style.left = (containerSize / 2 - joystickSize / 2) + 'px';
       joystick.style.top = (containerSize / 2 - joystickSize / 2) + 'px';
 
-      // Determine control type based on joystick ID
       var control = joystick.id === 'leftJoystick' ? 'move' : 'rotate';
       sendCommand({ control: control, angle: 0, speed: 0 });
     }
@@ -217,7 +216,7 @@
       }
     }
 
-    // Initialize joystick setup on page load
+    // Initialize joysticks when page loads
     window.onload = function() {
       setupJoysticks();
     };
